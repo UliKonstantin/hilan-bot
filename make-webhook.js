@@ -2,6 +2,8 @@ const express = require('express');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -10,6 +12,50 @@ app.use(express.json());
 
 // Store pending confirmations
 const pendingConfirmations = new Map();
+
+// Email configuration
+const emailConfig = {
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: process.env.SMTP_PORT || 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+};
+
+// Create email transporter
+const transporter = nodemailer.createTransporter(emailConfig);
+
+// Helper function to send email with Excel attachment
+async function sendEmailWithExcel(recipientEmail, excelFilePath, excelFileName) {
+  try {
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: recipientEmail,
+      subject: `Hilan Timesheet Report - ${new Date().toLocaleDateString('he-IL')}`,
+      html: `
+        <h2>Hilan Timesheet Report</h2>
+        <p>Your monthly timesheet report is attached.</p>
+        <p>Generated on: ${new Date().toLocaleString('he-IL')}</p>
+        <p>This is an automated report from the Hilan Bot.</p>
+      `,
+      attachments: [
+        {
+          filename: excelFileName,
+          path: excelFilePath
+        }
+      ]
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Error sending email:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 // Helper function to find the most recent Excel file
 function findLatestExcelFile() {
@@ -32,13 +78,45 @@ function findLatestExcelFile() {
 }
 
 // Helper function to read Excel file as base64
-function readExcelFileAsBase64(filePath) {
+function readExcelAsBase64(filePath) {
   try {
     const fileBuffer = fs.readFileSync(filePath);
     return fileBuffer.toString('base64');
   } catch (error) {
     console.error('Error reading Excel file:', error);
     return null;
+  }
+}
+
+// Helper function to call Make.com webhook
+async function callMakeWebhook(excelFile, excelSize, excelData, status, message) {
+  const makeWebhookUrl = process.env.MAKE_WEBHOOK_URL;
+  if (!makeWebhookUrl) {
+    console.log('No MAKE_WEBHOOK_URL configured, skipping Make.com webhook call');
+    return;
+  }
+
+  try {
+    console.log('Calling Make.com webhook...');
+    const response = await fetch(makeWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        excelFile: excelFile,
+        excelSize: excelSize,
+        excelData: excelData,
+        status: status,
+        message: message
+      })
+    });
+
+    if (response.ok) {
+      console.log('✅ Make.com webhook called successfully');
+    } else {
+      console.error('❌ Make.com webhook call failed:', response.status, response.statusText);
+    }
+  } catch (error) {
+    console.error('❌ Error calling Make.com webhook:', error.message);
   }
 }
 
@@ -75,7 +153,7 @@ app.post('/trigger', async (req, res) => {
       let excelFileName = null;
       
       if (latestExcel) {
-        excelData = readExcelFileAsBase64(latestExcel.path);
+        excelData = readExcelAsBase64(latestExcel.path);
         excelFileName = latestExcel.name;
         console.log('Found Excel file:', excelFileName);
       }
@@ -122,7 +200,7 @@ app.post('/webhook/hilan-automation', async (req, res) => {
     // Execute the Hilan bot
     const scriptPath = path.join(__dirname, 'index.js');
     
-    exec(`node ${scriptPath}`, (error, stdout, stderr) => {
+    exec(`node ${scriptPath}`, async (error, stdout, stderr) => {
       if (error) {
         console.error('Error executing script:', error);
         res.status(500).json({ 
@@ -143,11 +221,16 @@ app.post('/webhook/hilan-automation', async (req, res) => {
       let excelFileName = null;
       
       if (latestExcel) {
-        excelData = readExcelFileAsBase64(latestExcel.path);
+        excelData = readExcelAsBase64(latestExcel.path);
         excelFileName = latestExcel.name;
         console.log('Found Excel file:', excelFileName);
+        
+        // Call Make.com webhook with Excel data
+        await callMakeWebhook(excelFileName, latestExcel.stats.size, excelData, 'success', 'Excel file generated successfully');
       } else {
         console.log('No Excel file found in downloads directory');
+        // Call Make.com webhook with error
+        await callMakeWebhook(null, null, null, 'error', 'No Excel file found');
       }
       
       res.json({ 
