@@ -16,7 +16,7 @@ try {
   for (const browserType of ["chromium"]) {
     const browser = await playwright[browserType].launch({
       headless: true,
-      slowMo: 50,
+      slowMo: 100,
     });
     const context = await browser.newContext();
     const page = await context.newPage();
