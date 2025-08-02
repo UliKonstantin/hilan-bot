@@ -1,0 +1,9 @@
+---
+hilan:
+  workingDayStartHour: "09"
+  workingDayStartMinutes: "00"
+  workingDayEndHour: "17"
+  workingDayEndMinutes: "30"
+  startingDayIndex: 1
+  pages:
+    loginPage: ${HILAN_LOGIN_PAGE} 
