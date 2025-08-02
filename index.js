@@ -6,7 +6,7 @@ var Promise = require("bluebird");
 (async () => {
   for (const browserType of ["chromium"]) {
     const browser = await playwright[browserType].launch({
-      headless: false,
+      headless: true,
       slowMo: 50,
     });
     const context = await browser.newContext();
