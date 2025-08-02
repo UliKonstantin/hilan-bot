@@ -25,7 +25,7 @@ const emailConfig = {
 };
 
 // Create email transporter
-const transporter = nodemailer.createTransporter(emailConfig);
+const transporter = nodemailer.createTransport(emailConfig);
 
 // Helper function to send email with Excel attachment
 async function sendEmailWithExcel(recipientEmail, excelFilePath, excelFileName) {
