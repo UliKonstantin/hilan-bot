@@ -8,10 +8,6 @@
     "webhook": "node make-webhook.js",
     "build": "npm install && npx playwright install chromium",
     "postinstall": "npx playwright install chromium",
-    "docker:build": "docker build -t hilan-automation .",
-    "docker:run": "docker run -p 3000:3000 hilan-automation",
-    "docker:compose": "docker-compose up -d",
-    "docker:compose:down": "docker-compose down",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
