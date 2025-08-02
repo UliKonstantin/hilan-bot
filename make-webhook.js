@@ -200,16 +200,20 @@ app.post('/webhook/hilan-automation', async (req, res) => {
     // Execute the Hilan bot
     const scriptPath = path.join(__dirname, 'index.js');
     
+    // Return immediately to avoid timeout
+    res.json({ 
+      success: true, 
+      message: 'Hilan automation triggered successfully',
+      timestamp: new Date().toISOString(),
+      source: 'make_trigger'
+    });
+    
+    // Execute the automation in background
     exec(`node ${scriptPath}`, async (error, stdout, stderr) => {
       if (error) {
         console.error('Error executing script:', error);
-        res.status(500).json({ 
-          success: false, 
-          error: error.message,
-          stdout: stdout,
-          stderr: stderr,
-          source: 'direct'
-        });
+        // Call Make.com webhook with error
+        await callMakeWebhook(null, null, null, 'error', `Automation failed: ${error.message}`);
         return;
       }
       
@@ -232,17 +236,6 @@ app.post('/webhook/hilan-automation', async (req, res) => {
         // Call Make.com webhook with error
         await callMakeWebhook(null, null, null, 'error', 'No Excel file found');
       }
-      
-      res.json({ 
-        success: true, 
-        message: 'Hilan automation completed successfully',
-        timestamp: new Date().toISOString(),
-        output: stdout,
-        excelFile: excelFileName,
-        excelData: excelData,
-        excelSize: latestExcel ? latestExcel.stats.size : null,
-        source: 'direct'
-      });
     });
   } catch (error) {
     console.error('Error in webhook:', error);
