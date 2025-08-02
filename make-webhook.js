@@ -62,10 +62,15 @@ function findLatestExcelFile() {
   const downloadsDir = path.join(__dirname, 'downloads');
   
   if (!fs.existsSync(downloadsDir)) {
+    console.log('Downloads directory does not exist:', downloadsDir);
     return null;
   }
   
-  const files = fs.readdirSync(downloadsDir)
+  console.log('Scanning downloads directory:', downloadsDir);
+  const files = fs.readdirSync(downloadsDir);
+  console.log('All files in downloads:', files);
+  
+  const excelFiles = files
     .filter(file => file.endsWith('.xls') || file.endsWith('.xlsx'))
     .map(file => ({
       name: file,
@@ -74,14 +79,53 @@ function findLatestExcelFile() {
     }))
     .sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime());
   
-  return files.length > 0 ? files[0] : null;
+  console.log('Excel files found:', excelFiles.map(f => ({ name: f.name, size: f.stats.size, mtime: f.stats.mtime })));
+  
+  return excelFiles.length > 0 ? excelFiles[0] : null;
 }
 
 // Helper function to read Excel file as base64
 function readExcelAsBase64(filePath) {
   try {
+    console.log('Reading Excel file as base64:', filePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      console.error('File does not exist:', filePath);
+      return null;
+    }
+    
+    // Check file size
+    const stats = fs.statSync(filePath);
+    console.log('File size:', stats.size, 'bytes');
+    
+    if (stats.size === 0) {
+      console.error('File is empty:', filePath);
+      return null;
+    }
+    
+    // Read file as buffer
     const fileBuffer = fs.readFileSync(filePath);
-    return fileBuffer.toString('base64');
+    console.log('File buffer length:', fileBuffer.length);
+    
+    // Convert to base64
+    const base64Data = fileBuffer.toString('base64');
+    console.log('Base64 data length:', base64Data.length);
+    
+    // Validate base64 data (should not be empty and should be valid base64)
+    if (!base64Data || base64Data.length === 0) {
+      console.error('Base64 data is empty');
+      return null;
+    }
+    
+    // Check if it looks like valid base64 (should contain only A-Z, a-z, 0-9, +, /, =)
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
+      console.error('Invalid base64 data detected');
+      return null;
+    }
+    
+    console.log('Successfully converted file to base64');
+    return base64Data;
   } catch (error) {
     console.error('Error reading Excel file:', error);
     return null;
@@ -200,15 +244,18 @@ app.post('/webhook/hilan-automation', async (req, res) => {
     // Execute the Hilan bot
     const scriptPath = path.join(__dirname, 'index.js');
     
-    // Return immediately to avoid timeout
-    res.json({ 
+    // Return immediately to avoid timeout - this is crucial for Make.com
+    res.status(200).json({ 
       success: true, 
       message: 'Hilan automation triggered successfully',
       timestamp: new Date().toISOString(),
-      source: 'make_trigger'
+      source: 'make_trigger',
+      status: 'triggered',
+      automationId: `hilan-${Date.now()}`
     });
     
-    // Execute the automation in background
+    // Execute the automation in background AFTER sending response
+    console.log('Starting background automation...');
     exec(`node ${scriptPath}`, async (error, stdout, stderr) => {
       if (error) {
         console.error('Error executing script:', error);
@@ -218,6 +265,8 @@ app.post('/webhook/hilan-automation', async (req, res) => {
       }
       
       console.log('Script executed successfully');
+      console.log('STDOUT:', stdout);
+      if (stderr) console.log('STDERR:', stderr);
       
       // Find the latest Excel file
       const latestExcel = findLatestExcelFile();
@@ -228,6 +277,7 @@ app.post('/webhook/hilan-automation', async (req, res) => {
         excelData = readExcelAsBase64(latestExcel.path);
         excelFileName = latestExcel.name;
         console.log('Found Excel file:', excelFileName);
+        console.log('Excel file size:', latestExcel.stats.size, 'bytes');
         
         // Call Make.com webhook with Excel data
         await callMakeWebhook(excelFileName, latestExcel.stats.size, excelData, 'success', 'Excel file generated successfully');
@@ -239,11 +289,14 @@ app.post('/webhook/hilan-automation', async (req, res) => {
     });
   } catch (error) {
     console.error('Error in webhook:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      source: 'direct'
-    });
+    // Only send error response if we haven't sent a response yet
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        source: 'direct'
+      });
+    }
   }
 });
 
