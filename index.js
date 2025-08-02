@@ -202,11 +202,20 @@ try {
       
       // Find the button by text content from our buttons array
       let reportButton = null;
+      console.log(`Total buttons found: ${allButtons.length}`);
+      
       for (let i = 0; i < allButtons.length; i++) {
         const text = await allButtons[i].textContent();
-        console.log(`Button ${i} text: "${text}" (trimmed: "${text?.trim()}")`);
-        if (text && text.trim() === "דיווח ועדכון") {
-          console.log(`✅ Found דיווח ועדכון button at index ${i}`);
+        const trimmedText = text?.trim();
+        console.log(`Button ${i} text: "${text}" (trimmed: "${trimmedText}")`);
+        
+        // Check for partial matches too
+        if (text && trimmedText === "דיווח ועדכון") {
+          console.log(`✅ Found exact דיווח ועדכון button at index ${i}`);
+          reportButton = allButtons[i];
+          break;
+        } else if (text && trimmedText.includes("דיווח") && trimmedText.includes("ועדכון")) {
+          console.log(`✅ Found partial דיווח ועדכון button at index ${i}`);
           reportButton = allButtons[i];
           break;
         }
