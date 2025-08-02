@@ -15,7 +15,7 @@ try {
 (async () => {
   for (const browserType of ["chromium"]) {
     const browser = await playwright[browserType].launch({
-      headless: true,
+      headless: false,
       slowMo: 100,
     });
     const context = await browser.newContext();
@@ -482,19 +482,6 @@ try {
         // Find timesheet rows more specifically - after clicking ימים נבחרים the structure might be different
         console.log("Looking for timesheet table rows...");
         
-        // First, let's see what's actually on the page
-        const allTables = await page.locator('table').all();
-        console.log(`Found ${allTables.length} tables on the page`);
-        
-        const allRows = await page.locator('tr').all();
-        console.log(`Found ${allRows.length} total rows on the page`);
-        
-        const allInputs = await page.locator('input').all();
-        console.log(`Found ${allInputs.length} total inputs on the page`);
-        
-        const allSelects = await page.locator('select').all();
-        console.log(`Found ${allSelects.length} total selects on the page`);
-        
         // Target the specific timesheet table based on the HTML structure
         let timesheetRows = [];
         
@@ -540,9 +527,9 @@ try {
           }
         }
         
-        // Additional debugging: Check if we're getting the right rows
-        if (timesheetRows.length <= 1) {
-          console.log("⚠️ WARNING: Only found 1 or fewer rows. Trying alternative detection...");
+        // Only use alternative detection if we found 0 rows
+        if (timesheetRows.length === 0) {
+          console.log("⚠️ WARNING: No rows found with primary methods. Trying alternative detection...");
           
           // Try a more aggressive approach
           const allRows = await page.locator('tr').all();
@@ -554,16 +541,41 @@ try {
           const rowsWithTextInputs = await page.locator('tr:has(input[type="text"])').all();
           console.log(`Rows with text inputs: ${rowsWithTextInputs.length}`);
           
-          // If we found more rows with inputs, use those
-          if (rowsWithTextInputs.length > timesheetRows.length) {
+          // Use the most specific method that found rows
+          if (rowsWithTextInputs.length > 0) {
             console.log(`Using alternative detection: ${rowsWithTextInputs.length} rows with text inputs`);
             timesheetRows = rowsWithTextInputs;
+          } else if (rowsWithInputs.length > 0) {
+            console.log(`Using fallback detection: ${rowsWithInputs.length} rows with any inputs`);
+            timesheetRows = rowsWithInputs;
           }
+        }
+        
+        // Remove any duplicate rows by checking for unique identifiers
+        const uniqueRows = [];
+        const seenIds = new Set();
+        
+        for (const row of timesheetRows) {
+          try {
+            const rowId = await row.getAttribute('id') || await row.getAttribute('class') || 'unknown';
+            if (!seenIds.has(rowId)) {
+              seenIds.add(rowId);
+              uniqueRows.push(row);
+            }
+          } catch (error) {
+            // If we can't get an ID, include the row anyway
+            uniqueRows.push(row);
+          }
+        }
+        
+        if (uniqueRows.length !== timesheetRows.length) {
+          console.log(`Removed ${timesheetRows.length - uniqueRows.length} duplicate rows`);
+          timesheetRows = uniqueRows;
         }
         
         // PRODUCTION: Process all rows
         const maxRows = timesheetRows.length; // Process all rows
-        console.log(`Processing ${maxRows} rows (ALL ROWS)`);
+        console.log(`Processing ${maxRows} unique rows (ALL ROWS)`);
         
         // Fill each row with the required data
         for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
@@ -924,66 +936,57 @@ try {
               if (excelLink) {
                 console.log("=== DOWNLOADING EXCEL FILE ===");
                 
-                // Set up download event listener before clicking
-                const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
+                // Verify we're on the correct page before downloading
+                const currentUrl = page.url();
+                console.log("Current URL before download:", currentUrl);
                 
-                console.log("Clicking Excel export link...");
-                try {
-                  await excelLink.click({ timeout: 10000 });
-                  console.log("✅ Clicked Excel export link (method 1)");
-                } catch (clickError) {
-                  console.log("Method 1 failed, trying dispatchEvent...");
-                  try {
-                    await excelLink.dispatchEvent('click');
-                    console.log("✅ Clicked Excel export link (method 2)");
-                  } catch (dispatchError) {
-                    console.log("Method 2 failed, trying programmatic click...");
-                    await excelLink.evaluate(el => el.click());
-                    console.log("✅ Clicked Excel export link (method 3)");
-                  }
+                if (!currentUrl.includes('AttendanceApproval.aspx')) {
+                  console.log("❌ Not on the correct page for Excel download");
+                  console.log("Expected URL to contain 'AttendanceApproval.aspx'");
+                  return;
                 }
                 
-                await Promise.delay(3000);
-                console.log("✅ Clicked Excel export link");
+                console.log("Clicking Excel export link (ASP.NET postback)...");
+                
+                // For ASP.NET postback, we need to handle the Save As dialog
+                // Set up dialog handler before clicking
+                page.on('dialog', async dialog => {
+                  console.log('Dialog opened:', dialog.type(), dialog.message());
+                  if (dialog.type() === 'prompt') {
+                    // This might be a Save As dialog
+                    console.log('Handling Save As dialog...');
+                    await dialog.accept();
+                  } else {
+                    await dialog.dismiss();
+                  }
+                });
                 
                 try {
-                  // Wait for download to start
-                  const download = await downloadPromise;
-                  console.log("✅ Excel download started:", download.suggestedFilename());
+                  // Click the Excel export link (this triggers ASP.NET postback)
+                  await excelLink.click({ timeout: 10000 });
+                  console.log("✅ Clicked Excel export link");
                   
-                  // Save the file with timestamp
-                  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                  const downloadPath = `./downloads/hilan-timesheet-${timestamp}.xls`;
-                  await download.saveAs(downloadPath);
-                  console.log("✅ Excel file saved to:", downloadPath);
-                  
-                  // Return the file path as automation output
-                  console.log("=== AUTOMATION SUCCESS ===");
-                  console.log("Excel file downloaded successfully:", downloadPath);
-                  
-                } catch (downloadError) {
-                  console.log("No download event detected, checking for Save As dialog...");
-                  
-                  // Wait a bit for the Save As dialog to appear
+                  // Wait for the postback to complete and Save As dialog to appear
                   await Promise.delay(3000);
                   
-                  // Try to find and click the Save button in the Save As dialog
+                  // Look for Save As dialog or download
                   try {
-                    // Look for Save button by text (macOS)
-                    const saveButton = await page.locator('button:has-text("Save")').first();
+                    // Method 1: Look for Save As dialog
+                    const saveButton = await page.locator('input[type="submit"], button[type="submit"]').first();
                     if (await saveButton.isVisible()) {
                       console.log("✅ Found Save button in dialog, clicking...");
                       await saveButton.click();
                       await Promise.delay(2000);
                       console.log("✅ Clicked Save button in dialog");
                     } else {
-                      // Try alternative selectors for Save button
+                      // Method 2: Try alternative selectors for Save button
                       const saveSelectors = [
-                        'button[type="submit"]',
-                        'input[type="submit"]',
+                        'button:has-text("Save")',
                         'button:has-text("שמור")',
                         'button:has-text("OK")',
-                        'button:has-text("Confirm")'
+                        'button:has-text("Confirm")',
+                        'input[value*="Save"]',
+                        'input[value*="שמור"]'
                       ];
                       
                       for (const selector of saveSelectors) {
@@ -1001,8 +1004,46 @@ try {
                         }
                       }
                     }
+                    
+                    // Wait a bit more for the file to be saved
+                    await Promise.delay(3000);
+                    
+                    // Check if a file was downloaded to the downloads directory
+                    const fs = require('fs');
+                    const downloadsDir = './downloads';
+                    if (fs.existsSync(downloadsDir)) {
+                      const files = fs.readdirSync(downloadsDir);
+                      const excelFiles = files.filter(f => f.endsWith('.xls') || f.endsWith('.xlsx'));
+                      if (excelFiles.length > 0) {
+                        // Get the most recent Excel file
+                        const latestFile = excelFiles
+                          .map(f => ({ name: f, path: `${downloadsDir}/${f}`, stats: fs.statSync(`${downloadsDir}/${f}`) }))
+                          .sort((a, b) => b.stats.mtime.getTime() - a.stats.mtime.getTime())[0];
+                        
+                        console.log("✅ Excel file found:", latestFile.name);
+                        console.log("File size:", latestFile.stats.size, "bytes");
+                        
+                        // Verify it's not HTML
+                        const fileBuffer = fs.readFileSync(latestFile.path, { encoding: null });
+                        const firstBytes = fileBuffer.slice(0, 100).toString('utf8');
+                        
+                        if (firstBytes.includes('<html') || firstBytes.includes('<!DOCTYPE')) {
+                          console.log("❌ Downloaded file appears to be HTML, not Excel");
+                          console.log("First 100 bytes:", firstBytes);
+                          fs.unlinkSync(latestFile.path); // Delete the HTML file
+                          throw new Error("Downloaded file is HTML, not Excel");
+                        } else {
+                          console.log("✅ Downloaded file appears to be valid Excel");
+                          console.log("=== AUTOMATION SUCCESS ===");
+                          console.log("Excel file downloaded successfully:", latestFile.path);
+                        }
+                      } else {
+                        console.log("❌ No Excel files found in downloads directory");
+                      }
+                    }
+                    
                   } catch (dialogError) {
-                    console.log("No Save As dialog found, checking if Excel opened in new tab...");
+                    console.log("Save As dialog handling failed:", dialogError.message);
                     
                     // Check if a new page/tab opened
                     const pages = await context.pages();
@@ -1023,6 +1064,24 @@ try {
                       console.log("✅ Closed Excel page");
                     } else {
                       console.log("No new page opened, Excel might have opened in same page");
+                    }
+                  }
+                  
+                } catch (clickError) {
+                  console.log("❌ Error clicking Excel export link:", clickError.message);
+                  
+                  // Try alternative click methods
+                  try {
+                    await excelLink.dispatchEvent('click');
+                    console.log("✅ Clicked Excel export link with dispatchEvent");
+                  } catch (dispatchError) {
+                    console.log("❌ dispatchEvent also failed:", dispatchError.message);
+                    
+                    try {
+                      await excelLink.evaluate(el => el.click());
+                      console.log("✅ Clicked Excel export link with evaluate");
+                    } catch (evaluateError) {
+                      console.log("❌ All click methods failed for Excel export");
                     }
                   }
                 }
