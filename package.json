@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "webhook": "node make-webhook.js",
-    "build": "npm install && npx playwright install chromium",
-    "postinstall": "npx playwright install chromium",
+    "build": "npm install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {

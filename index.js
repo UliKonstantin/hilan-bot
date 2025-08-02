@@ -3,6 +3,15 @@ const config = require("config");
 const playwright = require("playwright");
 var Promise = require("bluebird");
 
+// Install Playwright browsers if not available
+const { execSync } = require('child_process');
+try {
+  require('playwright/lib/server/chromium');
+} catch (e) {
+  console.log('Installing Playwright browsers...');
+  execSync('npx playwright install chromium', { stdio: 'inherit' });
+}
+
 (async () => {
   for (const browserType of ["chromium"]) {
     const browser = await playwright[browserType].launch({

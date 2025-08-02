@@ -3,7 +3,7 @@ services:
     name: hilan-automation
     env: node
     plan: free
-    buildCommand: npm install && npx playwright install chromium
+    buildCommand: npm install
     startCommand: node make-webhook.js
     envVars:
       - key: NODE_ENV
