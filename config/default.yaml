@@ -2,8 +2,8 @@
 hilan:
   workingDayStartHour: "09"
   workingDayStartMinutes: "00"
-  workingDayEndHour: "19"
-  workingDayEndMinutes: "00"
+  workingDayEndHour: "17"
+  workingDayEndMinutes: "30"
   startingDayIndex: 1
   pages:
     loginPage: https://defaultlogin.com/login

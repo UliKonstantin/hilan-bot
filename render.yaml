@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: hilan-automation
+    env: node
+    plan: free
+    buildCommand: npm install && npx playwright install chromium
+    startCommand: node make-webhook.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health 

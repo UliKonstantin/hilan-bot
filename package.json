@@ -5,7 +5,17 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "webhook": "node make-webhook.js",
+    "build": "npm install && npx playwright install chromium",
+    "postinstall": "npx playwright install chromium",
+    "docker:build": "docker build -t hilan-automation .",
+    "docker:run": "docker run -p 3000:3000 hilan-automation",
+    "docker:compose": "docker-compose up -d",
+    "docker:compose:down": "docker-compose down",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "author": "",
   "license": "ISC",
@@ -13,6 +23,10 @@
     "playwright": "^1.8.0"
   },
   "dependencies": {
-    "bluebird": "^3.7.2"
+    "bluebird": "^3.7.2",
+    "config": "^3.3.6",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2",
+    "js-yaml": "^4.1.0"
   }
 }

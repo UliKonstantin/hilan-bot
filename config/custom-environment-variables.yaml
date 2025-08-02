@@ -2,5 +2,6 @@
 hilan:
   username: HILAN_USERNAME
   password: HILAN_PASSWORD
+  id: HILAN_ID
   pages:
     loginPage: HILAN_LOGIN_PAGE
