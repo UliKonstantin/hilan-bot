@@ -185,9 +185,27 @@ try {
       console.log("Current URL after login:", page.url());
       console.log("Page title:", await page.title());
       
+      // Wait for page to fully load
+      console.log("Waiting for page to fully load...");
+      await Promise.delay(5000);
+      
       // Look for any buttons or links that might lead to timesheet
-      const allButtons = await page.locator('button, a, [role="button"]').all();
-      console.log(`Found ${allButtons.length} clickable elements`);
+      let allButtons = await page.locator('button, a, [role="button"]').all();
+      console.log(`Method 1 - Found ${allButtons.length} clickable elements`);
+      
+      // If no buttons found, try broader selectors
+      if (allButtons.length === 0) {
+        console.log("No buttons found with method 1, trying method 2...");
+        allButtons = await page.locator("*").filter({ hasText: /דיווח|ועדכון|report|update/i }).all();
+        console.log(`Method 2 - Found ${allButtons.length} elements with text`);
+      }
+      
+      // If still no buttons, try getting all elements
+      if (allButtons.length === 0) {
+        console.log("No buttons found with method 2, trying method 3...");
+        allButtons = await page.locator("*").all();
+        console.log(`Method 3 - Found ${allButtons.length} total elements`);
+      }
       
       // Log text of clickable elements to find the right one
       for (let i = 0; i < Math.min(allButtons.length, 20); i++) {
