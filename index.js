@@ -561,9 +561,9 @@ try {
           }
         }
         
-        // Limit to reasonable number of rows (max 31 days in month)
-        const maxRows = timesheetRows.length; // Process all rows
-        console.log(`Processing ${maxRows} rows (ALL ROWS)`);
+        // TESTING: Limit to 2 rows for testing (REVERSE: Change back to maxRows for production)
+        const maxRows = Math.min(2, timesheetRows.length); // Process only 2 rows for testing
+        console.log(`Processing ${maxRows} rows (TESTING MODE - 2 ROWS ONLY)`);
         
         // Fill each row with the required data
         for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
@@ -836,219 +836,215 @@ try {
             await Promise.delay(2000);
             console.log("✅ Timesheet submitted!");
             
-            // POST-SAVE WORKFLOW: Navigate to גליון מנותח, then ריכוז דיווחים and export Excel
+            // POST-SAVE WORKFLOW: Navigate directly to ריכוז דיווחים and export Excel
             console.log("Starting post-save workflow...");
             
-            // Step 1: Navigate to גליון מנותח (Analyzed Sheet)
-            console.log("Looking for גליון מנותח button...");
+            // FIXED NAVIGATION: Skip גליון מנותח and go directly to ריכוז דיווחים
+            console.log("=== NAVIGATING DIRECTLY TO ריכוז דיווחים ===");
             try {
               // Wait for page to load after save
               await Promise.delay(3000);
               
-              // Look for גליון מנותח button
-              const analyzedSheetSelectors = [
-                'text="גליון מנותח"',
-                'button:has-text("גליון מנותח")',
-                'a:has-text("גליון מנותח")',
-                '[title*="גליון מנותח"]',
-                '[onclick*="גליון מנותח"]'
-              ];
+              // Navigate directly to the correct URL (REVERSE: Remove this direct navigation for production)
+              const targetUrl = "https://bgu-sso.net.hilan.co.il/Hilannetv2/Attendance/AttendanceApproval.aspx";
+              console.log(`Navigating directly to: ${targetUrl}`);
               
-              let analyzedSheetButton = null;
-              for (const selector of analyzedSheetSelectors) {
+              await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 30000 });
+              await Promise.delay(5000);
+              console.log("✅ Navigated directly to ריכוז דיווחים page");
+              
+              // COMPREHENSIVE DEBUGGING ON ריכוז דיווחים PAGE
+              console.log("=== DEBUGGING ריכוז דיווחים PAGE ===");
+              console.log("Current URL on ריכוז דיווחים page:", page.url());
+              console.log("Page title on ריכוז דיווחים page:", await page.title());
+              
+              // Take a screenshot to see the page
+              await page.screenshot({ path: 'debug-rikuz-diyurim.png' });
+              console.log("Screenshot saved as debug-rikuz-diyurim.png");
+              
+              // List all elements on the page
+              console.log("=== ANALYZING ריכוז דיווחים PAGE ELEMENTS ===");
+              const allElements = await page.locator('a, button, input, select').all();
+              console.log(`Found ${allElements.length} interactive elements on ריכוז דיווחים page`);
+              
+              for (let i = 0; i < Math.min(allElements.length, 50); i++) {
                 try {
-                  const button = await page.locator(selector).first();
-                  if (await button.isVisible()) {
-                    console.log(`Found גליון מנותח button with selector: ${selector}`);
-                    analyzedSheetButton = button;
-                    break;
+                  const element = allElements[i];
+                  const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+                  const text = await element.textContent();
+                  const id = await element.getAttribute('id');
+                  const className = await element.getAttribute('class');
+                  const href = await element.getAttribute('href');
+                  const onclick = await element.getAttribute('onclick');
+                  
+                  if (text && text.trim()) {
+                    console.log(`Element ${i}: <${tagName}> text="${text.trim()}" id="${id}" class="${className}" href="${href}" onclick="${onclick}"`);
                   }
                 } catch (e) {
-                  // Continue to next selector
+                  // Skip if element is no longer available
                 }
               }
               
-              if (analyzedSheetButton) {
-                console.log("Clicking גליון מנותח button...");
-                await analyzedSheetButton.dispatchEvent('click');
-                await Promise.delay(3000);
-                console.log("✅ Navigated to גליון מנותח page");
+              // Step 3: Look for the Excel export link with multiple strategies
+              console.log("=== LOOKING FOR EXCEL EXPORT LINK ===");
+              
+              // Strategy 1: Look for specific Excel link
+              const excelSelectors = [
+                'a#ctl00_mp_Strip_helpExcel',
+                'a[href*="Excel"]',
+                'a[href*="export"]',
+                'a[href*="download"]',
+                'a:has-text("Excel")',
+                'a:has-text("ייצוא")',
+                'a:has-text("הורדה")',
+                'a:has-text("Download")',
+                'button:has-text("Excel")',
+                'button:has-text("ייצוא")',
+                'input[value*="Excel"]',
+                'input[value*="ייצוא"]'
+              ];
+              
+              let excelLink = null;
+              let excelSelector = null;
+              
+              for (const selector of excelSelectors) {
+                try {
+                  const link = await page.locator(selector).first();
+                  if (await link.isVisible()) {
+                    console.log(`✅ Found Excel export link with selector: ${selector}`);
+                    excelLink = link;
+                    excelSelector = selector;
+                    break;
+                  }
+                } catch (e) {
+                  console.log(`Excel selector ${selector} failed: ${e.message}`);
+                }
+              }
+              
+              if (excelLink) {
+                console.log("=== DOWNLOADING EXCEL FILE ===");
                 
-                // Debug: Check what's on the גליון מנותח page
-                console.log("Current URL on גליון מנותח page:", page.url());
-                console.log("Page title on גליון מנותח page:", await page.title());
+                // Set up download event listener before clicking
+                const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
                 
-                // Take a screenshot to see the page
-                await page.screenshot({ path: 'debug-gilion-munatach.png' });
-                console.log("Screenshot saved as debug-gilion-munatach.png");
-                
-                // Step 2: Navigate to ריכוז דיווחים from גליון מנותח page
-                console.log("Looking for ריכוז דיווחים link on גליון מנותח page...");
-                const reportSummarySelectors = [
-                  'a:has-text("ריכוז דיווחים")',
-                  'a[href*="AttendanceApproval.aspx"]',
-                  'a.footer-links:has-text("ריכוז דיווחים")',
-                  'text="ריכוז דיווחים"',
-                  'button:has-text("ריכוז דיווחים")',
-                  '[title*="ריכוז דיווחים"]',
-                  '[onclick*="ריכוז דיווחים"]'
-                ];
-                
-                let reportSummaryLink = null;
-                for (const selector of reportSummarySelectors) {
+                console.log("Clicking Excel export link...");
+                try {
+                  await excelLink.click({ timeout: 10000 });
+                  console.log("✅ Clicked Excel export link (method 1)");
+                } catch (clickError) {
+                  console.log("Method 1 failed, trying dispatchEvent...");
                   try {
-                    const link = await page.locator(selector).first();
-                    if (await link.isVisible()) {
-                      console.log(`Found ריכוז דיווחים link with selector: ${selector}`);
-                      reportSummaryLink = link;
-                      break;
-                    }
-                  } catch (e) {
-                    // Continue to next selector
+                    await excelLink.dispatchEvent('click');
+                    console.log("✅ Clicked Excel export link (method 2)");
+                  } catch (dispatchError) {
+                    console.log("Method 2 failed, trying programmatic click...");
+                    await excelLink.evaluate(el => el.click());
+                    console.log("✅ Clicked Excel export link (method 3)");
                   }
                 }
                 
-                if (reportSummaryLink) {
-                  console.log("Clicking ריכוז דיווחים link...");
-                  await reportSummaryLink.dispatchEvent('click');
+                await Promise.delay(3000);
+                console.log("✅ Clicked Excel export link");
+                
+                try {
+                  // Wait for download to start
+                  const download = await downloadPromise;
+                  console.log("✅ Excel download started:", download.suggestedFilename());
+                  
+                  // Save the file with timestamp
+                  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                  const downloadPath = `./downloads/hilan-timesheet-${timestamp}.xls`;
+                  await download.saveAs(downloadPath);
+                  console.log("✅ Excel file saved to:", downloadPath);
+                  
+                  // Return the file path as automation output
+                  console.log("=== AUTOMATION SUCCESS ===");
+                  console.log("Excel file downloaded successfully:", downloadPath);
+                  
+                } catch (downloadError) {
+                  console.log("No download event detected, checking for Save As dialog...");
+                  
+                  // Wait a bit for the Save As dialog to appear
                   await Promise.delay(3000);
-                  console.log("✅ Navigated to ריכוז דיווחים page");
                   
-                  // Debug: Check what's on the ריכוז דיווחים page
-                  console.log("Current URL on ריכוז דיווחים page:", page.url());
-                  console.log("Page title on ריכוז דיווחים page:", await page.title());
-                  
-                  // Take a screenshot to see the page
-                  await page.screenshot({ path: 'debug-rikuz-diyurim.png' });
-                  console.log("Screenshot saved as debug-rikuz-diyurim.png");
-                  
-                  // Step 3: Look for the Excel export link
-                  console.log("Looking for Excel export link...");
-                  const excelLink = await page.locator('a#ctl00_mp_Strip_helpExcel').first();
-                  
-                  if (await excelLink.isVisible()) {
-                    console.log("✅ Found Excel export link");
-                    
-                    // Set up download event listener before clicking
-                    const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-                    
-                    console.log("Clicking Excel export link...");
-                    await excelLink.dispatchEvent('click');
-                    await Promise.delay(3000);
-                    console.log("✅ Clicked Excel export link");
-                    
-                    try {
-                      // Wait for download to start
-                      const download = await downloadPromise;
-                      console.log("✅ Excel download started:", download.suggestedFilename());
-                      
-                      // Save the file
-                      const downloadPath = `./downloads/${download.suggestedFilename()}`;
-                      await download.saveAs(downloadPath);
-                      console.log("✅ Excel file saved to:", downloadPath);
-                      
-                    } catch (downloadError) {
-                      console.log("No download event detected, checking for Save As dialog...");
-                      
-                      // Wait a bit for the Save As dialog to appear
+                  // Try to find and click the Save button in the Save As dialog
+                  try {
+                    // Look for Save button by text (macOS)
+                    const saveButton = await page.locator('button:has-text("Save")').first();
+                    if (await saveButton.isVisible()) {
+                      console.log("✅ Found Save button in dialog, clicking...");
+                      await saveButton.click();
                       await Promise.delay(2000);
+                      console.log("✅ Clicked Save button in dialog");
+                    } else {
+                      // Try alternative selectors for Save button
+                      const saveSelectors = [
+                        'button[type="submit"]',
+                        'input[type="submit"]',
+                        'button:has-text("שמור")',
+                        'button:has-text("OK")',
+                        'button:has-text("Confirm")'
+                      ];
                       
-                      // Try to find and click the Save button in the Save As dialog
-                      try {
-                        // Look for Save button by text (macOS)
-                        const saveButton = await page.locator('button:has-text("Save")').first();
-                        if (await saveButton.isVisible()) {
-                          console.log("✅ Found Save button in dialog, clicking...");
-                          await saveButton.click();
-                          await Promise.delay(2000);
-                          console.log("✅ Clicked Save button in dialog");
-                        } else {
-                          // Try alternative selectors for Save button
-                          const saveSelectors = [
-                            'button[type="submit"]',
-                            'input[type="submit"]',
-                            'button:has-text("שמור")',
-                            'button:has-text("OK")',
-                            'button:has-text("Confirm")'
-                          ];
-                          
-                          for (const selector of saveSelectors) {
-                            try {
-                              const button = await page.locator(selector).first();
-                              if (await button.isVisible()) {
-                                console.log(`✅ Found Save button with selector: ${selector}`);
-                                await button.click();
-      await Promise.delay(2000);
-                                console.log("✅ Clicked Save button");
-                                break;
-                              }
-                            } catch (e) {
-                              // Continue to next selector
-                            }
+                      for (const selector of saveSelectors) {
+                        try {
+                          const button = await page.locator(selector).first();
+                          if (await button.isVisible()) {
+                            console.log(`✅ Found Save button with selector: ${selector}`);
+                            await button.click();
+                            await Promise.delay(2000);
+                            console.log("✅ Clicked Save button");
+                            break;
                           }
-                        }
-                      } catch (dialogError) {
-                        console.log("No Save As dialog found, checking if Excel opened in new tab...");
-                        
-                        // Check if a new page/tab opened
-                        const pages = await context.pages();
-                        if (pages.length > 1) {
-                          console.log(`Found ${pages.length} pages, Excel might have opened in new tab`);
-                          
-                          // Switch to the new page
-                          const newPage = pages[pages.length - 1];
-                          await newPage.bringToFront();
-                          console.log("Switched to new page:", newPage.url());
-                          
-                          // Take screenshot of the Excel page
-                          await newPage.screenshot({ path: 'debug-excel-opened.png' });
-                          console.log("Screenshot of opened Excel saved as debug-excel-opened.png");
-                          
-                          // Close the Excel page
-                          await newPage.close();
-                          console.log("✅ Closed Excel page");
-                        } else {
-                          console.log("No new page opened, Excel might have opened in same page");
+                        } catch (e) {
+                          // Continue to next selector
                         }
                       }
                     }
-                  } else {
-                    console.log("❌ Excel export link not found");
+                  } catch (dialogError) {
+                    console.log("No Save As dialog found, checking if Excel opened in new tab...");
                     
-                    // Debug: List all links to see what's available
-                    const allLinks = await page.locator('a').all();
-                    console.log(`Found ${allLinks.length} total links on the page`);
-                    
-                    for (let j = 0; j < Math.min(allLinks.length, 20); j++) {
-                      const linkText = await allLinks[j].textContent();
-                      const linkId = await allLinks[j].getAttribute('id');
-                      const linkTitle = await allLinks[j].getAttribute('title');
-                      if (linkText || linkId || linkTitle) {
-                        console.log(`Link ${j}: text="${linkText}" id="${linkId}" title="${linkTitle}"`);
-                      }
-                    }
-                  }
-                } else {
-                  console.log("❌ ריכוז דיווחים link not found");
-                  
-                  // Debug: List all links to see what's available
-                  const allLinks = await page.locator('a').all();
-                  console.log(`Found ${allLinks.length} total links on גליון מנותח page`);
-                  
-                  for (let j = 0; j < Math.min(allLinks.length, 20); j++) {
-                    const linkText = await allLinks[j].textContent();
-                    const linkHref = await allLinks[j].getAttribute('href');
-                    const linkClass = await allLinks[j].getAttribute('class');
-                    if (linkText && linkText.trim()) {
-                      console.log(`Link ${j}: text="${linkText}" href="${linkHref}" class="${linkClass}"`);
+                    // Check if a new page/tab opened
+                    const pages = await context.pages();
+                    if (pages.length > 1) {
+                      console.log(`Found ${pages.length} pages, Excel might have opened in new tab`);
+                      
+                      // Switch to the new page
+                      const newPage = pages[pages.length - 1];
+                      await newPage.bringToFront();
+                      console.log("Switched to new page:", newPage.url());
+                      
+                      // Take screenshot of the Excel page
+                      await newPage.screenshot({ path: 'debug-excel-opened.png' });
+                      console.log("Screenshot of opened Excel saved as debug-excel-opened.png");
+                      
+                      // Close the Excel page
+                      await newPage.close();
+                      console.log("✅ Closed Excel page");
+                    } else {
+                      console.log("No new page opened, Excel might have opened in same page");
                     }
                   }
                 }
               } else {
-                console.log("❌ גליון מנותח button not found");
+                console.log("❌ Excel export link not found");
+                
+                // Debug: List all links to see what's available
+                const allLinks = await page.locator('a').all();
+                console.log(`Found ${allLinks.length} total links on the page`);
+                
+                for (let j = 0; j < Math.min(allLinks.length, 20); j++) {
+                  const linkText = await allLinks[j].textContent();
+                  const linkId = await allLinks[j].getAttribute('id');
+                  const linkTitle = await allLinks[j].getAttribute('title');
+                  if (linkText || linkId || linkTitle) {
+                    console.log(`Link ${j}: text="${linkText}" id="${linkId}" title="${linkTitle}"`);
+                  }
+                }
               }
             } catch (postSaveError) {
               console.log("Error in post-save workflow:", postSaveError.message);
+              console.log("Full error stack:", postSaveError.stack);
             }
             
           } catch (clickError) {
