@@ -561,9 +561,9 @@ try {
           }
         }
         
-        // TESTING: Limit to 2 rows for testing (REVERSE: Change back to maxRows for production)
-        const maxRows = Math.min(2, timesheetRows.length); // Process only 2 rows for testing
-        console.log(`Processing ${maxRows} rows (TESTING MODE - 2 ROWS ONLY)`);
+        // PRODUCTION: Process all rows
+        const maxRows = timesheetRows.length; // Process all rows
+        console.log(`Processing ${maxRows} rows (ALL ROWS)`);
         
         // Fill each row with the required data
         for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
